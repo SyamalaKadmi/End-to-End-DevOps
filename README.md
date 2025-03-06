@@ -1,435 +1,92 @@
-# Internsheep
+# Devops_Capstone_4
 
-This project consists of three main services: **Auth Service**, **User Service** and **Company Service**, designed for managing user authentication, profile details of users and company.
+## Objective
+ End-to-End DevOps Pipeline for a Web Application with CI/CD
 
 ---
 
-## **Auth Service API Documentation**
+## Problem Statement: [ProblemStatement.md](ProblemStatement.md)
 
-### **Base URL**
-```
-https://api.internsheep.in/auth
-```
+---
 
-### **Endpoints**
+## Application API documentation: [backend/README.md](backend/README.md)
 
-#### **1. Register a User**
+---
 
-- **URL**: `/register`
-- **Method**: `POST`
-- **Description**: Registers a new user.
-- **Request Body**:
-  ```json
-  {
-    "email": "testuser@example.com",
-    "password": "securepassword",
-    "role": "student"
-  }
-  ```
-- **Response**:
-  - **Success** (201):
-    ```json
-    {
-      "message": "User registered successfully"
-    }
+## Prerequisites
+- Fork the repository https://github.com/UnpredictablePrashant/JobsApp.git to your github account
+
+---
+
+## Instructions
+
+### 1. Architecture Design, Dockerization, and Jenkins Setup
+1. Design Application Architecture
+    - Use AWS EKS for Kubernetes cluster management.
+    - Deploy a web application containerized with Docker.
+    - Store container images in AWS ECR.
+    - Use Terraform for Infrastructure as Code (IaC).
+    - Automate configuration with Ansible.
+    - Monitor with Prometheus & Grafana.
+    ![Architecture.png](Images/Architecture.png)
+    - Draw.io architecture diagram can be found at [Capstone.drawio](Capstone.drawio)
+2. Dockerize the Web Applicaton
+    - Clone the forked repository to your local using 
+    ```bash
+        git clone <repositoryurl>
     ```
-  - **Error** (500 - User Already Exists):
-    ```json
-    {
-      "error": "User already exists"
-    }
+    - This application contains 3 services: Auth Service, User Service and Company Service, designed for managing user authentication, profile details of users and company. Create a docker file for each service
+    - Build each docker image
+    ``` bash
+    cd backend
+    docker build -t jobsapp-authservice:latest ./authService
+    docker build -t jobsapp-userservice:latest ./userService
+    docker build -t jobsapp-companyservice:latest ./companyService
     ```
-
----
-
-#### **2. Login a User**
-
-- **URL**: `/login`
-- **Method**: `POST`
-- **Description**: Authenticates a user and returns a JWT token.
-- **Request Body**:
-  ```json
-  {
-    "email": "testuser@example.com",
-    "password": "securepassword"
-  }
-  ```
-- **Response**:
-  - **Success** (200):
-    ```json
-    {
-      "token": "jwt-token-string"
-    }
+    - Tag the created docker images
+    ``` bash
+    aws configure
+    aws ecr create-repository --repository-name ssy-jobsapp
+    docker tag jobsapp-authservice:latest 975050024946.dkr.ecr.us-east-1.amazonaws.com/ssy-jobsapp:jobsapp-authservice
+    docker tag jobsapp-userservice:latest 975050024946.dkr.ecr.us-east-1.amazonaws.com/ssy-jobsapp:jobsapp-userservice
+    docker tag jobsapp-companyservice:latest 975050024946.dkr.ecr.us-east-1.amazonaws.com/ssy-jobsapp:jobsapp-companyservice
     ```
-  - **Error** (404 - User Not Found):
-    ```json
-    {
-      "error": "User not found"
-    }
+    - Push the images to the ECR
+    ``` bash
+    aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 975050024946.dkr.ecr.us-east-1.amazonaws.com
+    docker push 975050024946.dkr.ecr.us-east-1.amazonaws.com/ssy-jobsapp:jobsapp-authservice
+    docker push 975050024946.dkr.ecr.us-east-1.amazonaws.com/ssy-jobsapp:jobsapp-userservice
+    docker push 975050024946.dkr.ecr.us-east-1.amazonaws.com/ssy-jobsapp:jobsapp-companyservice
     ```
-  - **Error** (401 - Invalid Credentials):
-    ```json
-    {
-      "error": "Invalid credentials"
-    }
-    ```
+3. Setup Jenkins on EC2
+    - Create an EC2 instance - Amazon Linux 2, t2.micro, and allow the port 8080 for Jenkins
+    - 1. Login to the created EC2 instance
+        - Install Java (Required for Jenkins)
+        ```bash
+            sudo yum update -y
+            sudo yum install -y java-11-amazon-corretto
+        ```
+        - Add Jenkins repository
+        ```bash
+            sudo wget -O /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat-stable/jenkins.repo
+            sudo rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
+        ```
+        - Install & Start Jenkins
+        ```bash
+            sudo yum install -y jenkins
+            sudo systemctl start jenkins
+            sudo systemctl enable jenkins
+        ```
+        - Access Jenkins
+        Get the initial password from 
+        ```bash
+        sudo cat /var/lib/jenkins/secrets/initialAdminPassword
+        ```
+        - Open Jenkins in the browser: http://<ipaddress>:8080/ and enter the copied password and setup an admin user
+        - Install the required plugins - Git, Github, Docker Pipeline, AWS CLI, Kubernetes CLI, Terraform
+        - Configure credentials for AWS, DockerHub, and GitHub - Go to Jenkins Dashboard -> Manage Jenkins -> Credentials -> System -> Global credentials (unrestricted) -> Add Credentials
 
 ---
 
-#### **3. Access Protected Route**
-
-- **URL**: `/protected`
-- **Method**: `GET`
-- **Description**: Access a protected route that requires a valid JWT token.
-- **Headers**:
-  ```json
-  {
-    "Authorization": "Bearer <your-jwt-token>"
-  }
-  ```
-- **Response**:
-  - **Success** (200):
-    ```json
-    {
-      "message": "Access to protected route granted",
-      "user": {
-        "id": "userId",
-        "role": "student",
-        "iat": 1672256175,
-        "exp": 1672259775
-      }
-    }
-    ```
-  - **Error** (401 - Missing Authorization Header):
-    ```json
-    {
-      "error": "Authorization header is missing"
-    }
-    ```
-  - **Error** (403 - Invalid Token):
-    ```json
-    {
-      "error": "Invalid or expired token"
-    }
-    ```
-
----
-
-## **User Service API Documentation**
-
-### **Base URL**
-```
-https://api.internsheep.in/user
-```
-
-### **Endpoints**
-
-#### **1. Create or Update Profile**
-
-- **URL**: `/profile`
-- **Method**: `POST`
-- **Description**: Creates or updates a user's profile, including optional profile picture upload.
-- **Headers**:
-  ```json
-  {
-    "Authorization": "Bearer <your-jwt-token>"
-  }
-  ```
-- **Request Body**:
-  - Form Data:
-    - Fields:
-      ```json
-      {
-        "firstName": "John",
-        "lastName": "Doe",
-        "dob": "1990-01-01",
-        "gender": "Male",
-        "contactNumber": "1234567890",
-        "address": {
-          "street": "123 Main St",
-          "city": "New York",
-          "state": "NY",
-          "zip": "10001",
-          "country": "USA"
-        }
-      }
-      ```
-    - File:
-      - Key: `file` (Optional)
-      - Value: Upload profile picture.
-- **Response**:
-  - **Success** (200):
-    ```json
-    {
-      "message": "Profile saved successfully",
-      "profile": {
-        // Profile object
-      }
-    }
-    ```
-
----
-
-#### **2. Get Profile**
-
-- **URL**: `/profile`
-- **Method**: `GET`
-- **Description**: Retrieves the current user's profile.
-- **Headers**:
-  ```json
-  {
-    "Authorization": "Bearer <your-jwt-token>"
-  }
-  ```
-- **Response**:
-  ```json
-  {
-    // Profile object
-  }
-  ```
-
----
-
-#### **3. Get Profile by ID**
-
-- **URL**: `/profile/:id`
-- **Method**: `GET`
-- **Description**: Retrieves a profile by its ID.
-- **Headers**:
-  ```json
-  {
-    "Authorization": "Bearer <your-jwt-token>"
-  }
-  ```
-
----
-
-#### **4. Add Education**
-
-- **URL**: `/profile/education`
-- **Method**: `POST`
-- **Description**: Adds education entries to the user's profile.
-- **Headers**:
-  ```json
-  {
-    "Authorization": "Bearer <your-jwt-token>"
-  }
-  ```
-- **Request Body**:
-  ```json
-  [
-    {
-      "degree": "B.Tech",
-      "institution": "Stanford University",
-      "startYear": 2015,
-      "endYear": 2019,
-      "grade": "4.0 GPA"
-    },
-    {
-      "degree": "M.S.",
-      "institution": "MIT",
-      "startYear": 2020,
-      "endYear": 2022,
-      "grade": "3.8 GPA"
-    }
-  ]
-  ```
-
----
-
-#### **5. Add Work Experience**
-
-- **URL**: `/profile/work`
-- **Method**: `POST`
-- **Description**: Adds work experience entries to the user's profile.
-- **Headers**:
-  ```json
-  {
-    "Authorization": "Bearer <your-jwt-token>"
-  }
-  ```
-
-## **Company Service API Documentation**
-
-### **Base URL**
-```
-https://api.internsheep.in/company
-```
-
-### **Endpoints**
-
-#### **1. Create or Update Company**
-
-- **URL**: `/`
-- **Method**: `POST`
-- **Description**: Creates or updates a company for the logged-in user with the "company" role.
-- **Headers**:
-  ```json
-  {
-    "Authorization": "Bearer <your-jwt-token>"
-  }
-  ```
-- **Request Body**:
-  ```json
-  {
-    "name": "Tech Innovators",
-    "contactNumber": "1234567890",
-    "website": "https://techinnovators.com",
-    "address": {
-      "street": "123 Innovation Drive",
-      "city": "San Francisco",
-      "state": "CA",
-      "zip": "94103",
-      "country": "USA"
-    }
-  }
-  ```
-- **Response**:
-  - **Success (Create)** (201):
-    ```json
-    {
-      "message": "Company created successfully",
-      "company": {
-        // Company object
-      }
-    }
-    ```
-  - **Success (Update)** (200):
-    ```json
-    {
-      "message": "Company updated successfully",
-      "company": {
-        // Updated company object
-      }
-    }
-    ```
-
----
-
-#### **2. Get Company**
-
-- **URL**: `/`
-- **Method**: `GET`
-- **Description**: Retrieves the logged-in user's company details.
-- **Headers**:
-  ```json
-  {
-    "Authorization": "Bearer <your-jwt-token>"
-  }
-  ```
-- **Response**:
-  ```json
-  {
-    // Company object
-  }
-  ```
-
----
-
-#### **3. Upload Company Logo**
-
-- **URL**: `/logo`
-- **Method**: `POST`
-- **Description**: Uploads a company logo for the logged-in user's company.
-- **Headers**:
-  ```json
-  {
-    "Authorization": "Bearer <your-jwt-token>"
-  }
-  ```
-- **Request Body**:
-  - **Multipart Form Data**:
-    - Key: `file`
-    - Value: Select a file to upload as the logo.
-
----
-
-#### **4. Delete Company**
-
-- **URL**: `/`
-- **Method**: `DELETE`
-- **Description**: Deletes the logged-in user's company.
-- **Headers**:
-  ```json
-  {
-    "Authorization": "Bearer <your-jwt-token>"
-  }
-  ```
-- **Response**:
-  ```json
-  {
-    "message": "Company deleted successfully"
-  }
-  ```
----
-
-#### **6. Upload Resume**
-
-- **URL**: `/profile/upload-resume`
-- **Method**: `POST`
-- **Description**: Uploads a user's resume.
-- **Headers**:
-  ```json
-  {
-    "Authorization": "Bearer <your-jwt-token>"
-  }
-  ```
-- **Request Body**:
-  - Multipart Form Data:
-    - Key: `file`
-    - Value: Select a file to upload as the resume.
-
----
-
-## **Environment Variables**
-
-### **Auth Service**
-
-| Variable       | Description                            | Example                                |
-|-----------------|----------------------------------------|----------------------------------------|
-| `PORT`         | The port on which the service runs     | `5000`                                 |
-| `MONGO_URI`    | MongoDB connection string              | `mongodb://mongo:27017/intsheep`       |
-| `JWT_SECRET`   | Secret key for signing JWT tokens      | `someshittyjwttokenisbeingused`        |
-| `REDIS_HOST`   | Redis server hostname                  | `redis`                                |
-| `REDIS_PORT`   | Redis server port                      | `6379`                                 |
-| `KAFKA_BROKERS`| Kafka broker connection string         | `kafka:9092`                           |
-
----
-
-### **User Service**
-
-| Variable              | Description                            | Example                                |
-|------------------------|----------------------------------------|----------------------------------------|
-| `PORT`                | The port on which the service runs     | `5001`                                 |
-| `MONGO_URI`           | MongoDB connection string              | `mongodb://mongo:27017/intsheep`       |
-| `JWT_SECRET`          | Secret key for signing JWT tokens      | `someshittyjwttokenisbeingused`        |
-| `REDIS_HOST`          | Redis server hostname                  | `redis`                                |
-| `REDIS_PORT`          | Redis server port                      | `6379`                                 |
-| `AWS_REGION`          | AWS region for S3 bucket               | `us-east-1`                            |
-| `AWS_ACCESS_KEY_ID`   | AWS access key for S3                  | `your-access-key-id`                   |
-| `AWS_SECRET_ACCESS_KEY`| AWS secret access key for S3          | `your-secret-access-key`               |
-| `AWS_S3_BUCKET_NAME`  | AWS S3 bucket name                     | `your-s3-bucket-name`                  |
-
----
-
-### **Company Service**
-
-| Variable              | Description                            | Example                                |
-|------------------------|----------------------------------------|----------------------------------------|
-| `PORT`                | The port on which the service runs     | `5002`                                 |
-| `MONGO_URI`           | MongoDB connection string              | `mongodb://mongo:27017/intsheep`       |
-| `JWT_SECRET`          | Secret key for signing JWT tokens      | `someshittyjwttokenisbeingused`        |
-| `REDIS_HOST`          | Redis server hostname                  | `redis`                                |
-| `REDIS_PORT`          | Redis server port                      | `6379`                                 |
-| `AWS_REGION`          | AWS region for S3 bucket               | `us-east-1`                            |
-| `AWS_ACCESS_KEY_ID`   | AWS access key for S3                  | `your-access-key-id`                   |
-| `AWS_SECRET_ACCESS_KEY`| AWS secret access key for S3          | `your-secret-access-key`               |
-| `AWS_S3_BUCKET_NAME`  | AWS S3 bucket name                     | `your-s3-bucket-name`                  |
-
----
-
-## **Setup Instructions**
-
-### **1. Starting the Services**
-
-TODO: Run the services using Docker Compose 
+### 2. AWS Infrastructure Provisioning with Terraform and Jenkins Integration
+1. Write Terraform scripts for AWS Resources
